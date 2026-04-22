@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>BLHR0 · Professional Bagging System</title>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+            serverTimestamp, 
+            query, 
+            where, 
+            getDocs, 
+            deleteDoc, 
+            doc, 
+            Timestamp 
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        
+        // Firebase Configuration - Connected to bagging-blhr0
+        const firebaseConfig = {
+            apiKey: "AIzaSyDcp2-hgCJSqUCKeVz8yIh7lw0m9sh3c6s",
+            authDomain: "bagging-blhr0.firebaseapp.com",
+            projectId: "bagging-blhr0",
+            storageBucket: "bagging-blhr0.firebasestorage.app",
+            messagingSenderId: "752820187450",
+            appId: "1:752820187450:web:28a5eaa47cfa8f34802003"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.firebaseEnabled = true;
+        
+        // Export Firebase tools to window for global access
+        window.fbTools = { collection, addDoc, serverTimestamp, query, where, getDocs, deleteDoc, doc, Timestamp };
+        
+        // Auto-purge old data (361 days) from Firebase on load
+        setTimeout(() => autoCleanFirebase(), 3000);
+
+        async function autoCleanFirebase() {
+            if (!window.firebaseEnabled) return;
+            console.log("Checking Firebase retention policy (361 days)...");
+            
+            try {
+                const dayLimit = 361;
+                const expirationDate = new Date();
+                expirationDate.setDate(expirationDate.getDate() - dayLimit);
+                
+                const q = window.fbTools.query(
+                    window.fbTools.collection(window.db, "bagging"),
+                    window.fbTools.where("created_at", "<", window.fbTools.Timestamp.fromDate(expirationDate))
+                );
+
+                const querySnapshot = await window.fbTools.getDocs(q);
+                let deletedCount = 0;
+                
+                const deletePromises = [];
+                querySnapshot.forEach((document) => {
+                    deletePromises.push(window.fbTools.deleteDoc(window.fbTools.doc(window.db, "bagging", document.id)));
+                    deletedCount++;
+                });
+
+                await Promise.all(deletePromises);
+                if(deletedCount > 0) console.log(`Auto-purge: Deleted ${deletedCount} expired records from Firebase.`);
+            } catch (e) {
+                console.error("Auto-purge failed:", e);
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-dark: #1E40AF;
+            --accent: #F59E0B;
+            --bg-main: #F8FAFC;
+            --surface: #FFFFFF;
+            --text-main: #0F172A;
+            --text-muted: #64748B;
+            --radius-xl: 24px;
+            --radius-lg: 16px;
+            --shadow-sm: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        body {
+            background: var(--bg-main);
+            color: var(--text-main);
+            padding-bottom: 90px;
+            line-height: 1.5;
+        }
+
+        .header-modern {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: saturate(180%) blur(20px);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-modern .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-modern .brand .logo-box {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .header-modern h1 {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-transform: uppercase;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #10B981;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        }
+
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            padding: 16px;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(0,0,0,0.03);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .stat-card span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            display: block;
+        }
+
+        .stat-card strong {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
+        .container { padding: 20px; }
+        
+        .content-section {
+            display: none;
+            animation: cubic-bezier(0.4, 0, 0.2, 1) fadeIn 0.4s;
+        }
+        
+        .content-section.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .scanner-viewport {
+            position: relative;
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: var(--shadow-lg);
+            background: #000;
+            aspect-ratio: 1/1;
+        }
+
+        #reader { border: none !important; }
+
+        .scan-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 20px;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--primary);
+            box-shadow: 0 0 15px var(--primary);
+            animation: scanAnim 2s infinite linear;
+        }
+
+        @keyframes scanAnim {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        .modern-card {
+            background: var(--surface);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+
+        .table-container {
+            margin-top: 15px;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            border: 1px solid #F1F5F9;
+        }
+
+        .modern-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .modern-table th {
+            background: #F8FAFC;
+            padding: 14px;
+            text-align: left;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.5px;
+        }
+
+        .modern-table td {
+            padding: 16px 14px;
+            border-bottom: 1px solid #F1F5F9;
+        }
+
+        .btn-modern {
+            padding: 16px 24px;
+            border-radius: 18px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.25);
+        }
+
+        .btn-primary:active { transform: scale(0.96); }
+
+        .btn-outline {
+            background: transparent;
+            border: 2px solid #E2E8F0;
+            color: var(--text-main);
+        }
+
+        .navbar {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(15px);
+            border-radius: 24px;
+            display: flex;
+            padding: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        .nav-link {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            color: #94A3B8;
+            text-decoration: none;
+            gap: 4px;
+            transition: 0.3s;
+            border-radius: 18px;
+        }
+
+        .nav-link i { font-size: 1.4rem; }
+        .nav-link span { font-size: 0.65rem; font-weight: 600; }
+        
+        .nav-link.active {
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .swal2-popup {
+            border-radius: 32px !important;
+            padding: 2em !important;
+        }
+
+        .input-premium {
+            width: 100%;
+            padding: 16px;
+            border: 2px solid #F1F5F9;
+            border-radius: 16px;
+            background: #F8FAFC;
+            font-weight: 600;
+            transition: 0.3s;
+        }
+
+        #loader-premium {
+            position: fixed;
+            inset: 0;
+            background: rgba(255,255,255,0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(10px);
+        }
+
+        .loader-dots {
+            display: flex;
+            gap: 8px;
+        }
+
+        .loader-dots div {
+            width: 12px;
+            height: 12px;
+            background: var(--primary);
+            border-radius: 50%;
+            animation: bounce 0.5s infinite alternate;
+        }
+
+        .loader-dots div:nth-child(2) { animation-delay: 0.15s; }
+        .loader-dots div:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce { to { transform: translateY(-10px); opacity: 0.3; } }
+    </style>
+</head>
+<body>
+
+<div id="loader-premium">
+    <div class="loader-dots"><div></div><div></div><div></div></div>
+    <p id="loader-text" style="margin-top: 15px; font-weight: 700; color: var(--primary);">ENGINE PROCESSING...</p>
+</div>
+
+<header class="header-modern">
+    <div class="brand">
+        <div class="logo-box"><i class="fas fa-layer-group"></i></div>
+        <div>
+            <h1>SS <span style="color: var(--primary);">BLHR0</span></h1>
+            <p style="font-size: 0.65rem; color: var(--text-muted); font-weight: 700;"><span class="status-dot"></span> SYSTEM BAGGING OUTBOND</p>
+        </div>
+    </div>
+    <i class="fas fa-fingerprint" style="font-size: 1.4rem; color: #E2E8F0;"></i>
+</header>
+
+<div class="container">
+    <section id="tab-scan" class="content-section active">
+        <div class="scanner-viewport">
+            <div id="reader"></div>
+            <div class="scan-overlay">
+                <div class="scan-line"></div>
+            </div>
+        </div>
+        
+        <div class="modern-card" style="margin-top: -30px; position: relative; z-index: 10;">
+            <div style="text-align: center;">
+                <h2 style="font-size: 1.2rem; margin-bottom: 8px;">Ready to Scan</h2>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">Posisikan barcode di dalam kotak scanner untuk input otomatis.</p>
+                <div style="height: 1px; background: #F1F5F9; margin-bottom: 20px;"></div>
+                <div style="display: flex; justify-content: center; gap: 20px;">
+                    <div><i class="fas fa-bolt" style="color: var(--accent);"></i><p style="font-size: 0.7rem; font-weight: 700;">FAST</p></div>
+                    <div><i class="fas fa-shield-halved" style="color: #10B981;"></i><p style="font-size: 0.7rem; font-weight: 700;">SECURE</p></div>
+                    <div><i class="fas fa-cloud-arrow-up" style="color: var(--primary);"></i><p style="font-size: 0.7rem; font-weight: 700;">CLOUD</p></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="tab-history" class="content-section">
+        <div class="quick-stats">
+            <div class="stat-card">
+                <span>TOTAL ITEM</span>
+                <strong id="statTotal">0</strong>
+            </div>
+            <div class="stat-card">
+                <span>TOTAL MB</span>
+                <strong id="statMB">0</strong>
+            </div>
+        </div>
+
+        <div class="modern-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="font-weight: 800; letter-spacing: -0.5px;">RECENT LOGS</h3>
+                <button onclick="renderHistory()" style="color: var(--primary); font-size: 0.9rem; background:none; border:none;"><i class="fas fa-rotate"></i></button>
+            </div>
+            
+            <div class="table-container">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            <th>Manifest/AWB</th>
+                            <th>Target</th>
+                            <th>Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 25px; display: flex; flex-direction: column; gap: 12px;">
+                <button class="btn-modern btn-primary" onclick="uploadData()">
+                    <i class="fab fa-whatsapp"></i> GENERATE REPORT
+                </button>
+                <button class="btn-modern btn-outline" onclick="clearHistory()" style="color: #EF4444; border-color: #FEE2E2;">
+                    <i class="fas fa-trash-can"></i> CLEAR LOCAL DATA
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section id="tab-download" class="content-section">
+        <div class="modern-card">
+            <div style="text-align: center; margin-bottom: 25px;">
+                <div style="width: 60px; height: 60px; background: #ECFDF5; color: #10B981; border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; font-size: 1.5rem;">
+                    <i class="fas fa-file-csv"></i>
+                </div>
+                <h3 style="font-weight: 800;">Archives & Export</h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">Download laporan dalam format Excel .xlsx</p>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); margin-left: 12px; margin-bottom: 5px; display: block;">START DATE</label>
+                    <input type="date" id="dateStart" class="input-premium">
+                </div>
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); margin-left: 12px; margin-bottom: 5px; display: block;">END DATE</label>
+                    <input type="date" id="dateEnd" class="input-premium">
+                </div>
+                <button class="btn-modern btn-primary" onclick="exportToExcel()" style="background: #10B981; margin-top: 10px;">
+                    <i class="fas fa-download"></i> DOWNLOAD EXCEL
+                </button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div id="modalInput" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.8); z-index:2000; padding:20px; align-items:center; justify-content:center; backdrop-filter:blur(10px);">
+    <div class="modern-card" style="width:100%; max-width:400px; animation: modalSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);">
+        <h3 style="margin-bottom:20px; display:flex; align-items:center; gap:10px;">
+            <i class="fas fa-barcode" style="color:var(--primary)"></i> DATA ENTRY
+        </h3>
+        <div style="display:flex; flex-direction:column; gap:15px;">
+            <input type="text" id="inpBarcode" readonly class="input-premium" style="background:#F1F5F9; border:none; color:var(--primary)">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <select id="inpTipe" class="input-premium">
+                    <option value="Satuan">SATUAN</option>
+                    <option value="MB">MB (BAG)</option>
+                </select>
+                <input type="number" id="inpJumlah" value="1" class="input-premium">
+            </div>
+            <select id="inpBag" class="input-premium" onchange="toggleManualInput(this.value)">
+                <option value="XRT">XRT (MISSRoute)</option>
+                <option value="Return To HD">RETURN TO HD</option>
+                <option value="VIP">VIP CUSTOMER</option>
+                <option value="ND">ND (NEXT DAY)</option>
+                <option value="DOCUMENT">DOCUMENT</option>
+                <option value="High Value">HIGH VALUE</option>
+                <optgroup label="Reguler Area">
+                    <option value="R-HLM">R-HLM</option><option value="R-XC">R-XC</option><option value="R-LP">R-LP</option>
+                    <option value="R-IH">R-IH</option><option value="R-SMG">R-SMG</option><option value="R-SOL">R-SOL</option>
+                </optgroup>
+                <option value="MIX">MIX</option>
+                <option value="MANUAL">-- MANUAL INPUT --</option>
+            </select>
+            <input type="text" id="inpManual" placeholder="Input Destination Name..." class="input-premium" style="display:none;">
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="btn-modern btn-primary" onclick="saveData()">SAVE DATA</button>
+                <button class="btn-modern btn-outline" onclick="closeModal()">CANCEL</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<nav class="navbar">
+    <a href="#" class="nav-link active" onclick="switchTab('tab-scan', this)">
+        <i class="fas fa-expand"></i>
+        <span>SCANNER</span>
+    </a>
+    <a href="#" class="nav-link" onclick="switchTab('tab-history', this)">
+        <i class="fas fa-receipt"></i>
+        <span>HISTORY</span>
+    </a>
+    <a href="#" class="nav-link" onclick="switchTab('tab-download', this)">
+        <i class="fas fa-file-invoice"></i>
+        <span>EXPORT</span>
+    </a>
+</nav>
+
+<script>
+    let html5QrCode;
+    let lastScanTime = 0;
+    const DEBOUNCE_DELAY = 2500;
+
+    window.onload = () => {
+        startScanner();
+        renderHistory();
+        setDefaultDates();
+    };
+
+    function setDefaultDates() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('dateStart').value = today;
+        document.getElementById('dateEnd').value = today;
+    }
+
+    function startScanner() {
+        if (html5QrCode && html5QrCode.isScanning) return;
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 20, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+        html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+            const now = Date.now();
+            if (now - lastScanTime > DEBOUNCE_DELAY) {
+                lastScanTime = now;
+                playBeep();
+                openModal(decodedText);
+            }
+        }).catch(err => console.error(err));
+    }
+
+    function openModal(barcode) {
+        document.getElementById('inpBarcode').value = barcode;
+        document.getElementById('modalInput').style.display = 'flex';
+        if(html5QrCode) html5QrCode.pause();
+    }
+
+    function closeModal() {
+        document.getElementById('modalInput').style.display = 'none';
+        document.getElementById('inpManual').style.display = 'none';
+        document.getElementById('inpManual').value = '';
+        document.getElementById('inpJumlah').value = 1;
+        if(html5QrCode) html5QrCode.resume();
+    }
+
+    function toggleManualInput(val) {
+        document.getElementById('inpManual').style.display = (val === 'MANUAL') ? 'block' : 'none';
+    }
+
+    function playBeep() {
+        try {
+            if (navigator.vibrate) navigator.vibrate(50);
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = 1200;
+            gain.gain.value = 0.1;
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+            osc.stop(audioCtx.currentTime + 0.15);
+        } catch(e) {}
+    }
+
+    function saveData() {
+        const barcode = document.getElementById('inpBarcode').value;
+        const tipe = document.getElementById('inpTipe').value;
+        let bag = document.getElementById('inpBag').value;
+        if(bag === 'MANUAL') bag = document.getElementById('inpManual').value;
+        const jumlah = parseInt(document.getElementById('inpJumlah').value);
+
+        if (!jumlah || jumlah < 1) {
+            Swal.fire({ icon: 'error', title: 'Invalid Quantity', text: 'Jumlah harus lebih dari 0' });
+            return;
+        }
+
+        const data = {
+            id: Date.now(),
+            barcode, tipe, bag, jumlah,
+            waktu: new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}),
+            tanggal: new Date().toISOString().split('T')[0],
+            timestamp: new Date().toISOString()
+        };
+
+        let logs = JSON.parse(localStorage.getItem('bagging_logs') || '[]');
+        logs.push(data);
+        localStorage.setItem('bagging_logs', JSON.stringify(logs));
+
+        Swal.fire({ icon: 'success', title: 'Data Secured', timer: 1000, showConfirmButton: false, position: 'top' });
+        renderHistory();
+        closeModal();
+    }
+
+    function renderHistory() {
+        const logs = JSON.parse(localStorage.getItem('bagging_logs') || '[]');
+        const today = new Date().toISOString().split('T')[0];
+        const filtered = logs.filter(l => l.tanggal === today).reverse();
+        
+        document.getElementById('statTotal').innerText = filtered.reduce((a, b) => a + b.jumlah, 0);
+        document.getElementById('statMB').innerText = filtered.filter(f => f.tipe === 'MB').length;
+
+        const html = filtered.map(l => `
+            <tr>
+                <td><strong style="color:var(--primary)">${l.barcode}</strong><br><span style="font-size:0.6rem; color:var(--text-muted)">${l.waktu} · ${l.tipe}</span></td>
+                <td style="font-weight:700;">${l.bag}</td>
+                <td style="text-align:center"><span style="background:#F1F5F9; padding:4px 8px; border-radius:8px;">${l.jumlah}</span></td>
+            </tr>
+        `).join('');
+        
+        document.getElementById('historyBody').innerHTML = html || '<tr><td colspan="3" style="text-align:center; padding:40px; color:#94A3B8;">No data available today</td></tr>';
+    }
+
+    function clearHistory() {
+        Swal.fire({
+            title: 'Wipe Local History?',
+            text: "Ini hanya menghapus data di HP ini. Data di Cloud (Firebase) tetap aman.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#2563EB',
+            cancelButtonColor: '#F1F5F9',
+            confirmButtonText: 'Ya, Hapus Lokal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                localStorage.removeItem('bagging_logs');
+                renderHistory();
+                Swal.fire('Cleared', 'History lokal berhasil dihapus', 'success');
+            }
+        })
+    }
+
+    async function uploadData() {
+        const logs = JSON.parse(localStorage.getItem('bagging_logs') || '[]');
+        const today = new Date().toISOString().split('T')[0];
+        const dataToUpload = logs.filter(l => l.tanggal === today);
+
+        if (dataToUpload.length === 0) {
+            Swal.fire('Empty Data', 'Tidak ada data hari ini untuk di-report.', 'info');
+            return;
+        }
+
+        document.getElementById('loader-premium').style.display = 'flex';
+
+        try {
+            if (window.firebaseEnabled) {
+                const baggingCol = window.fbTools.collection(window.db, "bagging");
+                for (const item of dataToUpload) {
+                    await window.fbTools.addDoc(baggingCol, { 
+                        ...item, 
+                        created_at: window.fbTools.serverTimestamp() 
+                    });
+                }
+            }
+            setTimeout(() => {
+                document.getElementById('loader-premium').style.display = 'none';
+                sendWhatsApp(dataToUpload);
+            }, 1000);
+        } catch (e) {
+            document.getElementById('loader-premium').style.display = 'none';
+            Swal.fire('Firebase Error', 'Sync gagal, namun WhatsApp tetap dibuka.', 'warning');
+            sendWhatsApp(dataToUpload);
+        }
+    }
+
+    function sendWhatsApp(data) {
+        const now = new Date();
+        const hari = new Intl.DateTimeFormat('id-ID', { weekday: 'long' }).format(now);
+        const tgl = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+        const totalKeseluruhan = data.reduce((sum, item) => sum + item.jumlah, 0);
+        const countMB = data.filter(i => i.tipe === 'MB').length;
+        const sumBag = (bagName) => data.filter(i => i.bag === bagName).reduce((sum, item) => sum + item.jumlah, 0);
+
+        const message = `*SS BLHR00* - Baleharjo, Gunungkidul
+${hari}, ${tgl}
+
+Pickup
+Total              : ${totalKeseluruhan}
+BP                  : ${sumBag('BP')}
+Reg                : ${countMB}
+ND                 : ${sumBag('ND')}
+VIP                : ${sumBag('VIP')}
+DOC              : ${sumBag('DOCUMENT')}
+HV                 : ${sumBag('High Value')}
+XRT               : ${sumBag('XRT')}
+RETURN HD : ${sumBag('Return To HD')}
+`;
+        window.open(`https://wa.me/6282210011917?text=${encodeURIComponent(message)}`, '_blank');
+    }
+
+    async function exportToExcel() {
+        const start = document.getElementById('dateStart').value;
+        const end = document.getElementById('dateEnd').value;
+        
+        let dataToExport = [];
+        const logs = JSON.parse(localStorage.getItem('bagging_logs') || '[]');
+        dataToExport = logs.filter(l => l.tanggal >= start && l.tanggal <= end);
+
+        if(dataToExport.length === 0 && window.firebaseEnabled) {
+            document.getElementById('loader-premium').style.display = 'flex';
+            document.getElementById('loader-text').innerText = "FETCHING CLOUD DATA...";
+            try {
+                const q = window.fbTools.query(
+                    window.fbTools.collection(window.db, "bagging"),
+                    window.fbTools.where("tanggal", ">=", start),
+                    window.fbTools.where("tanggal", "<=", end)
+                );
+                const snapshot = await window.fbTools.getDocs(q);
+                snapshot.forEach(doc => dataToExport.push(doc.data()));
+            } catch (e) { console.error(e); }
+            document.getElementById('loader-premium').style.display = 'none';
+        }
+
+        if(dataToExport.length === 0) {
+            Swal.fire('Error', 'Tidak ada data ditemukan pada rentang tanggal tersebut.', 'warning');
+            return;
+        }
+
+        const dataExcel = dataToExport.map(l => ({
+            TANGGAL: l.tanggal,
+            BARCODE: l.barcode,
+            TIPE: l.tipe,
+            BAG_DEST: l.bag,
+            QTY: l.jumlah,
+            TIME: l.waktu
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(dataExcel);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "BAGGING_LOGS");
+        XLSX.writeFile(wb, `REPORT_BLHR00_${start}_to_${end}.xlsx`);
+    }
+
+    function switchTab(tabId, el) {
+        document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        el.classList.add('active');
+        if (tabId === 'tab-scan') startScanner();
+        else if (html5QrCode) html5QrCode.stop().catch(() => {});
+    }
+</script>
+</body>
+</html>
